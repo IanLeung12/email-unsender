@@ -28,8 +28,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'getAuthStatus':
       handleGetAuthStatus(sendResponse);
       return true;
-    case 'initiateOAuth':
-      handleInitiateOAuth(request.provider, sendResponse);
+    case 'storeOAuthTokens':
+      handleStoreOAuthTokens(request.provider, request.tokens, sendResponse);
       return true;
     case 'deleteEmailGmail':
       handleDeleteEmailGmail(request.emailId, request.emailData, sendResponse);
@@ -92,17 +92,46 @@ function handleGetAuthStatus(sendResponse) {
 }
 
 /**
- * Initiate OAuth flow
+ * Store OAuth tokens received from popup
  */
-function handleInitiateOAuth(provider, sendResponse) {
-  // For now, we'll show a message that OAuth is not fully configured
-  sendResponse({
-    success: false,
-    error: 'OAuth not fully configured yet. Please set up Google/Microsoft credentials.',
-  });
+function handleStoreOAuthTokens(provider, tokens, sendResponse) {
+  try {
+    // Decode ID token to extract user info
+    const userInfo = decodeJwt(tokens.id_token || '');
+    
+    // Create account object
+    const account = {
+      id: `${provider}_${userInfo.sub || Date.now()}`,
+      provider,
+      email: userInfo.email || 'Unknown',
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAt: Date.now() + ((tokens.expires_in || 3600) * 1000),
+    };
 
-  // TODO: In production, implement full OAuth flow via popup
-  // This would involve opening a window and handling the callback
+    // Get existing accounts and add new one
+    chrome.storage.local.get(['accounts'], (result) => {
+      const accounts = result.accounts || [];
+      // Remove existing account for this provider to avoid duplicates
+      const filtered = accounts.filter(a => a.provider !== provider);
+      filtered.push(account);
+      
+      chrome.storage.local.set({ accounts: filtered }, () => {
+        console.log(`[Email Unsender] Account added: ${account.email}`);
+        sendResponse({
+          success: true,
+          email: account.email,
+          provider,
+        });
+      });
+    });
+  } catch (error) {
+    console.error('[Email Unsender] Error storing tokens:', error);
+    sendResponse({
+      success: false,
+      error: error.message || 'Failed to store tokens',
+    });
+  }
 }
 
 /**
@@ -114,12 +143,12 @@ function handleDeleteEmailGmail(emailId, emailData, sendResponse) {
   // Get Gmail account
   chrome.storage.local.get(['accounts'], async (result) => {
     const accounts = result.accounts || [];
-    const gmailAccount = accounts.find(a => a.provider === 'gmail');
+    const gmailAccount = accounts.find(a => a.provider === 'google');
 
     if (!gmailAccount) {
       sendResponse({
         success: false,
-        error: 'No Gmail account signed in. Please sign in first.',
+        error: 'No Google account signed in. Please sign in first.',
       });
       return;
     }
@@ -211,9 +240,62 @@ function handleRecordUnsendAttempt(data, sendResponse) {
 }
 
 /**
+ * Exchange authorization code for access/refresh tokens
+ */
+async function exchangeCodeForTokens(provider, code, clientId, clientSecret, redirectUri, tokenEndpoint) {
+  const body = {
+    grant_type: 'authorization_code',
+    code,
+    client_id: clientId,
+    client_secret: clientSecret,
+    redirect_uri: redirectUri,
+  };
+
+  const response = await fetch(tokenEndpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams(body).toString(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error_description || 'Failed to exchange code for token');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Simple JWT decoder (for ID tokens only, does not verify signature)
+ */
+function decodeJwt(token) {
+  if (!token) return {};
+  
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return {};
+    
+    const decoded = atob(parts[1]);
+    return JSON.parse(decoded);
+  } catch (error) {
+    console.error('[Email Unsender] Failed to decode JWT:', error);
+    return {};
+  }
+}
+
+/**
  * Gmail API Helper: Refresh token
  */
 async function refreshGmailToken(refreshToken) {
+  const clientId = localStorage.getItem('google_client_id');
+  const clientSecret = localStorage.getItem('google_client_secret');
+
+  if (!clientId || !clientSecret) {
+    throw new Error('OAuth credentials not configured in localStorage');
+  }
+
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: {
@@ -222,9 +304,9 @@ async function refreshGmailToken(refreshToken) {
     body: new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
-      client_id: 'YOUR_GOOGLE_CLIENT_ID', // TODO: Get from config
-      client_secret: 'YOUR_GOOGLE_CLIENT_SECRET', // TODO: Get from config
-    }),
+      client_id: clientId,
+      client_secret: clientSecret,
+    }).toString(),
   });
 
   if (!response.ok) {
