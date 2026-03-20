@@ -48,7 +48,31 @@ package.json              # Dependencies and build scripts
 - Firefox browser (version 109+)
 - Node.js and npm (for development)
 
-### Installation
+### Quick Start (5 minutes)
+
+1. **Load the extension in Firefox**
+   - Open `about:debugging`
+   - Click "This Firefox"
+   - Click "Load Temporary Add-on"
+   - Select `src/manifest.json`
+
+2. **Set up OAuth credentials** (see [QUICK_SETUP.md](QUICK_SETUP.md))
+   - Create Google OAuth app (5 min)
+   - Create Microsoft OAuth app (5 min)
+   - Store credentials in browser (`localStorage` commands)
+
+3. **Test it out**
+   - Go to Gmail/Outlook
+   - Compose and send email
+   - Click "Unsend" button within 60 seconds
+   - Email should be deleted
+
+### Detailed Guides
+- **[QUICK_SETUP.md](QUICK_SETUP.md)** — Fast checklist (recommended for new users)
+- **[OAUTH_SETUP.md](OAUTH_SETUP.md)** — Step-by-step OAuth configuration
+- **[STATUS.md](STATUS.md)** — Current implementation status & roadmap
+
+### Advanced Setup (Development)
 
 1. **Clone the repository**
    ```bash
@@ -62,49 +86,13 @@ package.json              # Dependencies and build scripts
    ```
 
 3. **Set up OAuth credentials**
-   - Copy example config:
-     ```bash
-     cp config/oauth-credentials.example.json config/oauth-credentials.json
-     ```
-   - Update with your OAuth client IDs and secrets (see below)
+   - Follow [OAUTH_SETUP.md](OAUTH_SETUP.md) for detailed steps
+   - Store credentials via browser console (see [QUICK_SETUP.md](QUICK_SETUP.md))
 
 4. **Load extension in Firefox**
-   - Open `about:debugging` in Firefox
-   - Click "This Firefox"
+   - Open `about:debugging`
    - Click "Load Temporary Add-on"
-   - Navigate to `src/manifest.json` and select it
-   - Extension should now be loaded and active
-
-### OAuth Setup
-
-#### Google Cloud (for Gmail)
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing
-3. Enable Gmail API:
-   - Search for "Gmail API" in APIs & Services
-   - Click "Enable"
-4. Create OAuth 2.0 credential (Web Application):
-   - Go to Credentials
-   - Click "Create Credentials" → OAuth 2.0 Client ID
-   - Select "Web application"
-   - Add authorized redirect URI: `https://<extension-id>.invalid/oauth-callback`
-   - Copy Client ID and Secret to `config/oauth-credentials.json`
-
-#### Microsoft Azure (for Outlook)
-
-1. Go to [Azure Portal](https://portal.azure.com/)
-2. Navigate to "Azure Active Directory" → "App registrations"
-3. Click "New registration"
-4. Name: "Email Unsender"
-5. Add redirect URI: `https://<extension-id>.invalid/oauth-callback`
-6. Under "Certificates & secrets", create a new client secret
-7. Under "API permissions":
-   - Add "Mail.ReadWrite" (Microsoft Graph)
-   - Add "Mail.Send"
-8. Copy Client ID and Secret to `config/oauth-credentials.json`
-
-> **Note**: Get your extension ID after first load in Firefox (shown in about:debugging)
+   - Select `src/manifest.json`
 
 ## Development
 
@@ -128,26 +116,31 @@ npm run lint
 npm test
 ```
 
-## Current Status: Phase 1 Complete ✅
+## Current Status: Phase 5 Complete ✅
 
 **Completed:**
-- Project structure and folder organization
-- Manifest V3 configuration
-- Basic popup UI and settings page
-- Content scripts for Gmail and Outlook (skeleton)
-- Background service worker (skeleton)
-- OAuth helper utilities (skeleton)
-- Storage and messaging utilities
+- ✅ Phase 1: Project structure and folder organization
+- ✅ Phase 2: Gmail quick undo (send button detection, timer, unsend UI)
+- ✅ Phase 5: OAuth authentication framework (token management, real API calls)
 
-**Next Phases:**
-1. **Phase 2**: Gmail quick undo implementation
-2. **Phase 3**: Gmail recall implementation
-3. **Phase 4**: Outlook quick undo + recall
-4. **Phase 5**: OAuth flow implementation
-5. **Phase 6**: Local storage & history
-6. **Phase 7**: Options page functionality
-7. **Phase 8**: Error handling & polish
-8. **Phase 9**: Testing
+**Fully Functional** (Ready to test):
+- Gmail send interception with countdown timer
+- OAuth sign-in for Google and Microsoft
+- Real Gmail API email deletion
+- Unsend history tracking
+- Settings page (time window, notifications, account management)
+
+**In Progress / Roadmap:**
+- Phase 3: Gmail recall (unsend from sent folder)
+- Phase 4: Outlook support (quick undo + recall)
+- Phase 6: Enhanced local storage & history
+- Phase 7: Options page full functionality
+- Phase 8: Error handling & polish
+- Phase 9: Comprehensive testing
+
+**For detailed status and remaining work**, see [STATUS.md](STATUS.md)
+
+**For quick setup**, see [QUICK_SETUP.md](QUICK_SETUP.md)
 
 ## Architecture Overview
 
