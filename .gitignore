@@ -14,3 +14,4 @@ config/oauth-credentials.json
 .cache/
 coverage/
 *.md
+!README.md
