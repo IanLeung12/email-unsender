@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Unsender</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="popup-container">
+    <div id="status-section">
+      <h2>Email Unsender</h2>
+      <div id="timer-display" style="display: none;">
+        <p>Unsend available for: <span id="timer-value">1:00</span></p>
+        <button id="unsend-btn" class="btn btn-primary">Unsend</button>
+      </div>
+      <div id="auth-section" style="display: none;">
+        <p>Sign in to use Email Unsender</p>
+        <button id="google-signin" class="btn btn-google">Sign in with Google</button>
+        <button id="outlook-signin" class="btn btn-microsoft">Sign in with Outlook</button>
+      </div>
+      <div id="account-info" style="display: none;">
+        <p>Logged in as: <span id="account-email"></span></p>
+      </div>
+    </div>
+    <footer>
+      <button id="open-options" class="btn btn-small">Settings</button>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

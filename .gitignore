@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+config/oauth-credentials.json
+.env
+.env.local
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cache/
+coverage/

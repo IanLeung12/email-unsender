@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Unsender Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="options-container">
+    <h1>Email Unsender Settings</h1>
+    
+    <section class="settings-section">
+      <h2>Time Window</h2>
+      <p>How long after sending can you unsend an email?</p>
+      <div class="time-window-control">
+        <input type="range" id="time-window-slider" min="5" max="300" value="60" step="5">
+        <span id="time-window-value">1 min</span>
+      </div>
+      <small>Between 5 seconds and 5 minutes</small>
+    </section>
+
+    <section class="settings-section">
+      <h2>Notifications</h2>
+      <label class="checkbox-label">
+        <input type="checkbox" id="notify-success" checked>
+        Show success notifications
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="notify-failure" checked>
+        Show error notifications
+      </label>
+    </section>
+
+    <section class="settings-section">
+      <h2>Account Management</h2>
+      <div id="accounts-list">
+        <!-- Populated by options.js -->
+      </div>
+      <button id="add-account-btn" class="btn btn-primary">Add Account</button>
+    </section>
+
+    <section class="settings-section">
+      <h2>Unsend History</h2>
+      <div id="history-container">
+        <div id="history-list">
+          <!-- Populated by options.js -->
+        </div>
+        <button id="clear-history-btn" class="btn btn-secondary">Clear History</button>
+      </div>
+    </section>
+
+    <div class="action-buttons">
+      <button id="save-btn" class="btn btn-primary">Save Settings</button>
+      <span id="save-status" class="save-status"></span>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
