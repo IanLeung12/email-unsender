@@ -17,6 +17,9 @@ function initializeGmail() {
   // Monitor for send button clicks
   monitorSendButton();
   
+  // Monitor for sent folder view (Phase 3: Recall)
+  monitorSentFolder();
+  
   // Listen for messages from background
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'unsendEmail') {
@@ -369,6 +372,313 @@ function performUnsend(emailId, callback) {
     // Clean up
     delete activeUnsends[emailId];
   });
+}
+
+/**
+ * PHASE 3: RECALL - Monitor for sent folder view and inject unsend buttons
+ */
+function monitorSentFolder() {
+  // Use MutationObserver to detect when emails are loaded in the list
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach(() => {
+      injectUnsendButtonsToSentEmails();
+    });
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+
+  // Initial scan for existing emails
+  injectUnsendButtonsToSentEmails();
+}
+
+/**
+ * Check if we're in the sent folder and inject unsend buttons
+ */
+function injectUnsendButtonsToSentEmails() {
+  // Check if we're in sent folder by looking for navigation indicators
+  // Gmail has the folder name in the page header or sidebar
+  const isSentFolder = checkIfSentFolder();
+  
+  if (!isSentFolder) return;
+
+  // Find all email rows in the list
+  const emailRows = document.querySelectorAll('[role="row"][data-thread-id]');
+  
+  emailRows.forEach((row) => {
+    const threadId = row.getAttribute('data-thread-id');
+    if (!threadId) return;
+
+    // Check if we already added a button to this row
+    if (row.classList.contains('eunsend-recall-processed')) {
+      return;
+    }
+
+    row.classList.add('eunsend-recall-processed');
+
+    // Extract email info from the row
+    const emailInfo = extractEmailInfoFromRow(row);
+
+    // Add hover-revealed unsend button
+    addUnsendButtonToRow(row, threadId, emailInfo);
+  });
+}
+
+/**
+ * Determine if we're currently viewing the sent folder
+ */
+function checkIfSentFolder() {
+  try {
+    // Look for "Sent" in the sidebar or navigation
+    const navItems = document.querySelectorAll('[role="navigation"] [role="tab"], [aria-label*="Sent"]');
+    
+    for (let item of navItems) {
+      if (item.textContent.includes('Sent') || item.getAttribute('aria-label')?.includes('Sent')) {
+        // Check if it's the active/selected item
+        if (item.getAttribute('aria-selected') === 'true' || item.classList.contains('selected')) {
+          return true;
+        }
+      }
+    }
+
+    // Fallback: check if "Sent" appears in the page title/header
+    const headerText = document.querySelector('[role="heading"]')?.textContent || '';
+    return headerText.includes('Sent');
+  } catch (err) {
+    console.error('[Email Unsender] Error checking for sent folder:', err);
+    return false;
+  }
+}
+
+/**
+ * Extract email information from a row element
+ */
+function extractEmailInfoFromRow(row) {
+  try {
+    const threadId = row.getAttribute('data-thread-id');
+    
+    // Extract sender/from (usually the first column)
+    const senderElement = row.querySelector('[data-sender-email], [role="gridcell"]');
+    const sender = senderElement?.textContent?.trim() || 'Unknown';
+
+    // Extract subject (usually second column)
+    const subjectElement = row.querySelectorAll('[role="gridcell"]')[1];
+    const subject = subjectElement?.textContent?.trim() || '(no subject)';
+
+    // Extract recipient/to from the preview or subject area
+    const recipients = extractRecipientsFromRow(row);
+
+    return {
+      threadId,
+      sender,
+      subject,
+      recipients: recipients.length > 0 ? recipients : ['Unknown'],
+    };
+  } catch (err) {
+    console.error('[Email Unsender] Error extracting email info:', err);
+    return {
+      threadId: '',
+      sender: 'Unknown',
+      subject: '(no subject)',
+      recipients: ['Unknown'],
+    };
+  }
+}
+
+/**
+ * Try to extract recipient addresses from row
+ */
+function extractRecipientsFromRow(row) {
+  try {
+    // Look for recipient info in data attributes or aria-labels
+    const cells = row.querySelectorAll('[role="gridcell"]');
+    const recipients = [];
+
+    // Check each cell for email-like patterns
+    cells.forEach((cell) => {
+      const text = cell.textContent;
+      // Simple email regex
+      const emailMatches = text.match(/[\w.-]+@[\w.-]+\.\w+/g);
+      if (emailMatches) {
+        recipients.push(...emailMatches);
+      }
+    });
+
+    // Remove duplicates
+    return [...new Set(recipients)];
+  } catch (err) {
+    return [];
+  }
+}
+
+/**
+ * Add an unsend button to an email row (revealed on hover)
+ */
+function addUnsendButtonToRow(row, threadId, emailInfo) {
+  try {
+    // Create a container for the unsend button
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'eunsend-recall-button-container';
+    buttonContainer.style.cssText = `
+      display: none;
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 1000;
+    `;
+
+    // Create unsend button
+    const unsendBtn = document.createElement('button');
+    unsendBtn.className = 'eunsend-recall-button';
+    unsendBtn.textContent = 'Unsend';
+    unsendBtn.style.cssText = `
+      padding: 6px 12px;
+      background-color: #d32f2f;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    `;
+
+    unsendBtn.addEventListener('mouseover', () => {
+      unsendBtn.style.backgroundColor = '#b71c1c';
+    });
+
+    unsendBtn.addEventListener('mouseout', () => {
+      unsendBtn.style.backgroundColor = '#d32f2f';
+    });
+
+    unsendBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleRecallUnsend(threadId, emailInfo, unsendBtn);
+    });
+
+    buttonContainer.appendChild(unsendBtn);
+
+    // Make row position relative for absolute positioning
+    if (getComputedStyle(row).position === 'static') {
+      row.style.position = 'relative';
+    }
+
+    row.appendChild(buttonContainer);
+
+    // Show button on hover
+    row.addEventListener('mouseenter', () => {
+      buttonContainer.style.display = 'block';
+    });
+
+    row.addEventListener('mouseleave', () => {
+      buttonContainer.style.display = 'none';
+    });
+
+  } catch (err) {
+    console.error('[Email Unsender] Error adding button to row:', err);
+  }
+}
+
+/**
+ * Handle unsend from sent folder (Phase 3: Recall)
+ */
+function handleRecallUnsend(threadId, emailInfo, button) {
+  console.log('[Email Unsender] Unsending from sent folder:', threadId, emailInfo);
+
+  // Disable button while processing
+  button.disabled = true;
+  button.textContent = 'Unsending...';
+  button.style.backgroundColor = '#999';
+
+  // Create unsend context for this email
+  const unsendContext = {
+    provider: 'gmail',
+    type: 'recall', // Distinguish from quick undo
+    timestamp: Date.now(),
+    recipients: emailInfo.recipients,
+    subject: emailInfo.subject,
+    sender: emailInfo.sender,
+    emailId: threadId,
+  };
+
+  // Store in activeUnsends for tracking
+  activeUnsends[threadId] = unsendContext;
+
+  // Call background worker to delete via Gmail API
+  chrome.runtime.sendMessage({
+    action: 'deleteEmailGmail',
+    emailId: threadId,
+    emailData: unsendContext,
+  }, (response) => {
+    if (response && response.success) {
+      button.textContent = '✓ Unsent';
+      button.style.backgroundColor = '#4caf50';
+      button.disabled = true;
+
+      // Show success notification
+      showRecallNotification('success', `Email to "${emailInfo.recipients[0]}" unsent from sent folder`);
+
+      // Remove the row after a delay (optional)
+      setTimeout(() => {
+        const emailRow = button.closest('[role="row"]');
+        if (emailRow) {
+          emailRow.style.opacity = '0.5';
+        }
+      }, 500);
+    } else {
+      button.textContent = '✗ Failed';
+      button.style.backgroundColor = '#d32f2f';
+      button.disabled = false;
+
+      showRecallNotification('error', response.error || 'Failed to unsend email');
+    }
+
+    // Record unsend attempt
+    chrome.runtime.sendMessage({
+      action: 'recordUnsendAttempt',
+      data: {
+        ...unsendContext,
+        success: response.success,
+        error: response.error,
+      },
+    });
+
+    delete activeUnsends[threadId];
+  });
+}
+
+/**
+ * Show notification for recall unsend
+ */
+function showRecallNotification(type, message) {
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 16px;
+    background-color: ${type === 'success' ? '#4caf50' : '#d32f2f'};
+    color: white;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    z-index: 10001;
+    animation: slideIn 0.3s ease-out;
+  `;
+
+  notification.textContent = message;
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.style.opacity = '0';
+    notification.style.transition = 'opacity 0.3s';
+    setTimeout(() => notification.remove(), 300);
+  }, 3000);
 }
 
 // Initialize on page load
