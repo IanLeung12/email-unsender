@@ -13,17 +13,19 @@ function initializePopup() {
   const googleSigninBtn = document.getElementById('google-signin');
   const outlookSigninBtn = document.getElementById('outlook-signin');
 
-  unsendBtn.addEventListener('click', handleUnsendClick);
-  openOptionsBtn.addEventListener('click', openOptions);
-  googleSigninBtn.addEventListener('click', () => handleSignIn('google'));
-  outlookSigninBtn.addEventListener('click', () => handleSignIn('outlook'));
+  if (unsendBtn) unsendBtn.addEventListener('click', handleUnsendClick);
+  if (openOptionsBtn) openOptionsBtn.addEventListener('click', openOptions);
+  if (googleSigninBtn) googleSigninBtn.addEventListener('click', () => handleSignIn('google'));
+  if (outlookSigninBtn) outlookSigninBtn.addEventListener('click', () => handleSignIn('outlook'));
 
   // Check authentication status and update UI
   checkAuthStatus();
   
   // Request current email context from background
   chrome.runtime.sendMessage({ action: 'getUnsendStatus' }, (response) => {
-    updateTimerDisplay(response);
+    if (response) {
+      updateTimerDisplay(response);
+    }
   });
 }
 
@@ -33,38 +35,48 @@ function checkAuthStatus() {
     const accountInfo = document.getElementById('account-info');
     const accountEmail = document.getElementById('account-email');
 
-    if (response.isAuthenticated) {
-      authSection.style.display = 'none';
-      accountInfo.style.display = 'block';
-      accountEmail.textContent = response.email || 'Unknown';
+    if (response && response.isAuthenticated) {
+      if (authSection) authSection.style.display = 'none';
+      if (accountInfo) accountInfo.style.display = 'block';
+      if (accountEmail) accountEmail.textContent = response.email || 'Unknown';
     } else {
-      authSection.style.display = 'block';
-      accountInfo.style.display = 'none';
+      if (authSection) authSection.style.display = 'block';
+      if (accountInfo) accountInfo.style.display = 'none';
     }
   });
 }
 
 function handleUnsendClick() {
+  const btn = document.getElementById('unsend-btn');
+  if (!btn) return;
+  
+  btn.disabled = true;
+  btn.textContent = 'Unsending...';
+
   chrome.runtime.sendMessage({ action: 'unsendEmail' }, (response) => {
-    if (response.success) {
-      alert('Email unsent successfully!');
-      window.close();
+    if (response && response.success) {
+      btn.textContent = '✓ Unsent!';
+      btn.style.backgroundColor = '#4caf50';
+      setTimeout(() => window.close(), 1500);
     } else {
-      alert(`Failed to unsend: ${response.error}`);
+      btn.textContent = '✗ Failed';
+      btn.style.backgroundColor = '#d32f2f';
+      btn.disabled = false;
     }
   });
 }
 
 function openOptions() {
   chrome.runtime.openOptionsPage();
+  window.close();
 }
 
 function handleSignIn(provider) {
   chrome.runtime.sendMessage({ action: 'initiateOAuth', provider }, (response) => {
-    if (response.success) {
+    if (response && response.success) {
       checkAuthStatus();
     } else {
-      alert(`Sign in failed: ${response.error}`);
+      alert(`Sign in failed: ${response?.error || 'Unknown error'}`);
     }
   });
 }
@@ -73,11 +85,11 @@ function updateTimerDisplay(status) {
   const timerDisplay = document.getElementById('timer-display');
   const timerValue = document.getElementById('timer-value');
 
-  if (status.canUnsend && status.timeRemaining > 0) {
+  if (timerDisplay && status && status.canUnsend && status.timeRemaining > 0) {
     timerDisplay.style.display = 'block';
-    timerValue.textContent = formatTime(status.timeRemaining);
+    if (timerValue) timerValue.textContent = formatTime(status.timeRemaining);
   } else {
-    timerDisplay.style.display = 'none';
+    if (timerDisplay) timerDisplay.style.display = 'none';
   }
 }
 

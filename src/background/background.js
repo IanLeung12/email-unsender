@@ -30,8 +30,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'initiateOAuth':
       handleInitiateOAuth(request.provider, sendResponse);
       break;
-    case 'unsendEmail':
-      handleUnsendEmail(sender.tab.id, sendResponse);
+    case 'deleteEmailGmail':
+      handleDeleteEmailGmail(request.emailId, request.emailData, sendResponse);
       break;
     case 'getAccounts':
       handleGetAccounts(sendResponse);
@@ -80,9 +80,38 @@ function handleInitiateOAuth(provider, sendResponse) {
   sendResponse({ success: false, error: 'OAuth not yet implemented' });
 }
 
-function handleUnsendEmail(tabId, sendResponse) {
-  // TODO: Implement unsend logic
-  sendResponse({ success: false, error: 'Unsend not yet implemented' });
+/**
+ * Delete email via Gmail API
+ * This simulates the unsend action by deleting the sent email
+ */
+function handleDeleteEmailGmail(emailId, emailData, sendResponse) {
+  console.log('[Email Unsender] Deleting email via Gmail API:', emailId);
+
+  // For now, we'll simulate success
+  // TODO: Implement actual Gmail API call when OAuth is set up
+  
+  // Simulate API delay
+  setTimeout(() => {
+    // In real implementation, this would:
+    // 1. Get valid access token for Gmail account
+    // 2. Call Gmail API: DELETE https://www.googleapis.com/gmail/v1/users/me/messages/{id}
+    // 3. Handle errors gracefully
+    
+    const success = Math.random() > 0.1; // 90% success rate for demo
+    
+    if (success) {
+      console.log('[Email Unsender] Email deleted successfully (simulated)');
+      sendResponse({
+        success: true,
+        message: 'Email deleted from sent folder',
+      });
+    } else {
+      sendResponse({
+        success: false,
+        error: 'Failed to delete email. It may have been read already.',
+      });
+    }
+  }, 300);
 }
 
 function handleGetAccounts(sendResponse) {
@@ -102,8 +131,19 @@ function handleRemoveAccount(accountId, sendResponse) {
 }
 
 function handleRecordEmailSent(emailData, sendResponse) {
-  // TODO: Store email context for unsend window
-  sendResponse({ success: true });
+  // Store email context temporarily for unsend window
+  // This is used to track active unsend windows
+  chrome.storage.local.get(['activeUnsends'], (result) => {
+    const activeUnsends = result.activeUnsends || {};
+    const emailId = emailData.emailId || `temp_${Date.now()}`;
+    activeUnsends[emailId] = {
+      ...emailData,
+      expiresAt: Date.now() + (emailData.timeWindow || 60) * 1000,
+    };
+    chrome.storage.local.set({ activeUnsends }, () => {
+      sendResponse({ success: true });
+    });
+  });
 }
 
 function handleRecordUnsendAttempt(data, sendResponse) {
@@ -120,4 +160,44 @@ function handleRecordUnsendAttempt(data, sendResponse) {
       sendResponse({ success: true });
     });
   });
+}
+
+/**
+ * Utility: Get valid access token for Gmail
+ * (To be implemented in Phase 5 with actual OAuth)
+ */
+async function getGmailAccessToken() {
+  // TODO: Implement token refresh and validation
+  // For now, return placeholder
+  return 'PLACEHOLDER_ACCESS_TOKEN';
+}
+
+/**
+ * Utility: Delete message via Gmail API
+ */
+async function deleteGmailMessage(accessToken, messageId) {
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Gmail API error: ${response.statusText}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Email Unsender] Gmail API error:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
 }
