@@ -34,6 +34,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'deleteEmailGmail':
       handleDeleteEmailGmail(request.emailId, request.emailData, sendResponse);
       return true;
+    case 'deleteEmailOutlook':
+      handleDeleteEmailOutlook(request.emailId, request.emailData, sendResponse);
+      return true;
     case 'getAccounts':
       handleGetAccounts(sendResponse);
       return true;
@@ -183,6 +186,57 @@ function handleDeleteEmailGmail(emailId, emailData, sendResponse) {
     }
   });
 }
+
+/**
+ * Delete email via Microsoft Graph API (Outlook/Office 365)
+ */
+function handleDeleteEmailOutlook(emailId, emailData, sendResponse) {
+  console.log('[Email Unsender] Deleting email via Microsoft Graph API:', emailId);
+
+  // Get Outlook/Microsoft account
+  chrome.storage.local.get(['accounts'], async (result) => {
+    const accounts = result.accounts || [];
+    const outlookAccount = accounts.find(a => a.provider === 'microsoft');
+
+    if (!outlookAccount) {
+      sendResponse({
+        success: false,
+        error: 'No Microsoft account signed in. Please sign in first.',
+      });
+      return;
+    }
+
+    try {
+      // Get valid access token
+      let accessToken = outlookAccount.accessToken;
+      
+      // Check if token needs refresh
+      const now = Date.now();
+      if (outlookAccount.expiresAt - now < 300000) { // Expire within 5 min
+        console.log('[Email Unsender] Refreshing Microsoft token');
+        const newTokens = await refreshMicrosoftToken(outlookAccount.refreshToken);
+        accessToken = newTokens.access_token;
+        
+        // Update account in storage
+        outlookAccount.accessToken = accessToken;
+        outlookAccount.expiresAt = Date.now() + (newTokens.expires_in * 1000);
+        accounts[accounts.indexOf(outlookAccount)] = outlookAccount;
+        chrome.storage.local.set({ accounts });
+      }
+
+      // Call Microsoft Graph API to delete message
+      const result = await deleteOutlookMessage(accessToken, emailId);
+      sendResponse(result);
+    } catch (error) {
+      console.error('[Email Unsender] Error deleting Outlook email:', error);
+      sendResponse({
+        success: false,
+        error: error.message || 'Failed to delete email',
+      });
+    }
+  });
+}
+
 
 function handleGetAccounts(sendResponse) {
   chrome.storage.local.get(['accounts'], (result) => {
@@ -360,3 +414,82 @@ async function deleteGmailMessage(accessToken, messageId) {
     };
   }
 }
+
+/**
+ * Microsoft Graph API Helper: Refresh token
+ */
+async function refreshMicrosoftToken(refreshToken) {
+  const clientId = localStorage.getItem('microsoft_client_id');
+  const clientSecret = localStorage.getItem('microsoft_client_secret');
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Microsoft OAuth credentials not configured in localStorage');
+  }
+
+  const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }).toString(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Microsoft token refresh failed: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Microsoft Graph API Helper: Delete message
+ */
+async function deleteOutlookMessage(accessToken, messageId) {
+  try {
+    // Microsoft Graph uses /me/messages/{id} endpoint
+    // For folder-specific deletion, use /me/mailfolders/{folderId}/messages/{id}
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/me/messages/${messageId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (response.status === 204) {
+      // 204 No Content = success
+      return {
+        success: true,
+        message: 'Email deleted successfully',
+      };
+    } else if (response.status === 404) {
+      return {
+        success: false,
+        error: 'Email not found. It may have been deleted already.',
+      };
+    } else if (!response.ok) {
+      const error = await response.json();
+      return {
+        success: false,
+        error: error.error?.message || `Microsoft Graph API error: ${response.statusText}`,
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Email Unsender] Microsoft Graph API error:', error);
+    return {
+      success: false,
+      error: error.message || 'Network error deleting email',
+    };
+  }
+}
+
