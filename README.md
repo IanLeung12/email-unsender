@@ -1,4 +1,4 @@
-# Email Unsender - Firefox Extension
+# Email Unsender - Firefox Extension WIP DOES NOT WORK
 
 A Firefox extension providing a second line of defense for Gmail and Outlook users. Unsend emails within a configurable time window or recall already-sent emails.
 
